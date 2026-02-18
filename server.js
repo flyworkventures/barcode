@@ -3,8 +3,6 @@ const axios = require('axios');
 const OpenAI = require('openai');
 const fs = require('fs');
 const path = require('path');
-const { createCanvas } = require('canvas');
-const pdfjsLib = require('pdfjs-dist/legacy/build/pdf.js');
 require('dotenv').config();
 
 const app = express();
@@ -34,8 +32,9 @@ async function downloadPDF(url) {
   }
 }
 
-// PDF'i görüntüye çevir (pdfjs-dist kullanarak)
+// PDF'i görüntüye çevir (pdf-poppler kullanarak - Linux uyumlu)
 async function convertPDFToImages(pdfBuffer) {
+  const pdfPoppler = require('pdf-poppler');
   const tempDir = path.join(__dirname, 'temp');
   
   // Temp dizini yoksa oluştur
@@ -43,45 +42,35 @@ async function convertPDFToImages(pdfBuffer) {
     fs.mkdirSync(tempDir, { recursive: true });
   }
 
+  const tempPdfPath = path.join(tempDir, `temp_${Date.now()}.pdf`);
+  fs.writeFileSync(tempPdfPath, pdfBuffer);
+
+  const options = {
+    format: 'png',
+    out_dir: tempDir,
+    out_prefix: `page_${Date.now()}`,
+    page: null, // Tüm sayfalar
+  };
+
   try {
-    // Buffer'ı Uint8Array'e çevir
-    const uint8Array = new Uint8Array(pdfBuffer);
+    await pdfPoppler.convert(tempPdfPath, options);
     
-    // PDF dokümanını yükle (CMap uyarılarını önlemek için)
-    const loadingTask = pdfjsLib.getDocument({ 
-      data: uint8Array,
-      cMapUrl: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/cmaps/',
-      cMapPacked: true,
-      standardFontDataUrl: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/standard_fonts/',
-    });
-    const pdfDocument = await loadingTask.promise;
-    const numPages = pdfDocument.numPages;
-    const imagePaths = [];
+    // Oluşturulan görüntü dosyalarını bul
+    const files = fs.readdirSync(tempDir);
+    const imageFiles = files
+      .filter(file => file.startsWith(options.out_prefix) && file.endsWith('.png'))
+      .map(file => path.join(tempDir, file))
+      .sort();
 
-    // Her sayfayı görüntüye çevir
-    for (let pageNum = 1; pageNum <= numPages; pageNum++) {
-      const page = await pdfDocument.getPage(pageNum);
-      const viewport = page.getViewport({ scale: 2.0 }); // 2x scale for better quality
+    // Geçici PDF dosyasını sil
+    fs.unlinkSync(tempPdfPath);
 
-      // Canvas oluştur
-      const canvas = createCanvas(viewport.width, viewport.height);
-      const context = canvas.getContext('2d');
-
-      // Sayfayı canvas'a render et
-      await page.render({
-        canvasContext: context,
-        viewport: viewport,
-      }).promise;
-
-      // Canvas'ı PNG olarak kaydet
-      const imagePath = path.join(tempDir, `page_${Date.now()}_${pageNum}.png`);
-      const buffer = canvas.toBuffer('image/png');
-      fs.writeFileSync(imagePath, buffer);
-      imagePaths.push(imagePath);
-    }
-
-    return imagePaths;
+    return imageFiles;
   } catch (error) {
+    // Geçici PDF dosyasını sil
+    if (fs.existsSync(tempPdfPath)) {
+      fs.unlinkSync(tempPdfPath);
+    }
     throw new Error(`PDF görüntüye çevirme hatası: ${error.message}`);
   }
 }
