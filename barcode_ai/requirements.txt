@@ -1,0 +1,7 @@
+fastapi
+uvicorn[standard]
+pdf2image
+Pillow
+opencv-python-headless
+ultralytics
+python-multipart

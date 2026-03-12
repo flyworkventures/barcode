@@ -1,6 +1,6 @@
 # PDF Barkod ve Referans Numarası Analiz API'si
 
-Bu API, URL olarak gönderilen PDF dosyalarını GPT-4o ile analiz ederek barkod ve referans numarasını çıkarır.
+Bu API, URL olarak gönderilen PDF dosyalarından barkod ve referans numarasını çıkarır. **Linux** sunucularda önce **pdftotext** (referans) ve **zbarimg** (barkod) ile deterministik analiz yapılır; sonuç alınamazsa GPT-4o Vision fallback olarak kullanılır. Windows/macOS'ta yalnızca GPT kullanılır.
 
 ## Kurulum
 
@@ -19,6 +19,24 @@ cp .env.example .env
 OPENAI_API_KEY=your_openai_api_key_here
 PORT=3000
 ```
+
+### Linux sunucuda tam doğruluk (pdftotext + zbarimg)
+
+Linux'ta **%100 doğru** sonuç için sistemde şu paketler kurulu olmalı:
+
+- **poppler-utils** – PDF'ten metin (pdftotext) ve sayfa görüntüsü (pdftoppm) için
+- **zbar-tools** – Barkod okuma (zbarimg) için
+
+Kurulum örnekleri:
+
+- **Debian / Ubuntu:**  
+  `sudo apt-get update && sudo apt-get install -y poppler-utils zbar-tools`
+- **CentOS / RHEL / Fedora:**  
+  `sudo yum install -y poppler-utils zbar` veya `sudo dnf install -y poppler-utils zbar`
+- **Alpine:**  
+  `apk add poppler-utils zbar-tools`
+
+Bu araçlar yoksa veya hata alınırsa API otomatik olarak GPT ile analiz eder.
 
 ## Kullanım
 
@@ -80,6 +98,8 @@ curl http://localhost:3000/health
 
 ## Notlar
 
-- API, PDF'i görüntüye çevirerek GPT-4o Vision API ile analiz eder
-- Geçici dosyalar otomatik olarak temizlenir
-- GPT-5.2 henüz mevcut olmadığı için GPT-4o kullanılmaktadır
+- **Linux:** Önce pdftotext (referans) ve zbarimg (barkod) kullanılır; sonuç alınamazsa GPT-4o Vision devreye girer.
+- **Windows/macOS:** Yalnızca GPT-4o Vision ile analiz yapılır (pdftotext/zbarimg sistemde opsiyonel).
+- Geçici dosyalar otomatik olarak temizlenir.
+- **Referansı kapatmak için:** `.env` içinde `USE_REFERENCE=0` yazın; yanıt her zaman `referenceNumber: null` döner.
+- **Sadece EAN-13 barkod:** `.env` içinde `BARCODE_EAN13_ONLY=1` yazın; zbarimg yalnızca EAN-13 tarar ve sadece 13 haneli barkod kabul edilir.
